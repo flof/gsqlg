@@ -1,14 +1,21 @@
 package gsqlg
 
+import "fmt"
+
 type Select struct {
-	BaseSource SourceDef
+	BaseSource Source
 	Joins      []Join
 	Columns    []SelectColumn
 }
 
+type Source interface {
+	Definition() string
+	Alias() string
+}
+
 type Join struct {
 	JoinType    JoinType
-	Source      SourceDef
+	Source      Source
 	Constraints []JoinConstraint
 }
 
@@ -18,8 +25,21 @@ type JoinConstraint struct {
 }
 
 type SelectColumn interface {
-	SourceRef() SourceRef
-	ColumnName() string
+	Definition() string
+	Alias() string
+}
+
+type RawSelectColumn struct {
+	Raw      string
+	RawAlias string
+}
+
+func (r RawSelectColumn) Definition() string {
+	return r.Raw
+}
+
+func (r RawSelectColumn) Alias() string {
+	return r.RawAlias
 }
 
 var (
@@ -27,36 +47,16 @@ var (
 )
 
 type SourceColumn struct {
-	Source SourceRef
-	Name   string
+	SourceRef Source
+	Name      string
 }
 
-func (s SourceColumn) SourceRef() SourceRef {
-	return s.Source
+func (s SourceColumn) Definition() string {
+	return fmt.Sprintf("%s.%s", s.SourceRef.Alias(), s.Name)
 }
 
-func (s SourceColumn) ColumnName() string {
-	return s.Name
-}
-
-func (s SourceColumn) WithAlias(alias string) SourceColumnWithAlias {
-	return SourceColumnWithAlias{
-		SourceColumn: s,
-		ColumnAlias: alias,
-	}
-}
-
-var (
-	_ Aliaser = SourceColumnWithAlias{}
-)
-
-type SourceColumnWithAlias struct {
-	SourceColumn
-	ColumnAlias string
-}
-
-func (s SourceColumnWithAlias) Alias() string {
-	return s.ColumnAlias
+func (s SourceColumn) Alias() string {
+	return fmt.Sprintf("%s_%s", s.SourceRef.Alias(), s.Name)
 }
 
 type JoinType int
@@ -68,66 +68,26 @@ const (
 	JoinTypeCross
 )
 
-type SourceRef interface {
-	Ref() string
-}
-
-type SourceDef interface {
-	Def() string
-}
-
-type Aliaser interface {
-	Alias() string
-}
-
 var (
-	_ SourceRef = &Table{}
-	_ SourceDef = &Table{}
+	_ Source = &Table{}
 )
 
 type Table struct {
-	TableName string
+	TableName  string
+	TableAlias string
 }
 
-func (t *Table) Ref() string {
+func (t *Table) Definition() string {
 	return t.TableName
 }
 
-func (t *Table) Def() string {
-	return t.TableName
+func (t *Table) Alias() string {
+	return t.TableAlias
 }
 
 func (t *Table) Column(name string) SourceColumn {
 	return SourceColumn{
-		Source: t,
-		Name:   name,
-	}
-}
-
-var (
-	_ Aliaser = &TableWithAlias{}
-)
-
-type TableWithAlias struct {
-	Table      Table
-	TableAlias string
-}
-
-func (t *TableWithAlias) Ref() string {
-	return t.TableAlias
-}
-
-func (t *TableWithAlias) Def() string {
-	return t.Table.TableName
-}
-
-func (t *TableWithAlias) Alias() string {
-	return t.TableAlias
-}
-
-func (t *TableWithAlias) Column(name string) SourceColumn {
-	return SourceColumn{
-		Source: t,
-		Name:   name,
+		SourceRef: t,
+		Name:      name,
 	}
 }
