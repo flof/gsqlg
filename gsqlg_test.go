@@ -7,9 +7,9 @@ import (
 
 func TestModel(t *testing.T) {
 	var (
-		userTable           = &Table{TableName: "users", TableAlias: "u"}
-		primaryGroupTable   = &Table{TableName: "groups", TableAlias: "prim_grp"}
-		secondaryGroupTable = &Table{TableName: "groups", TableAlias: "sec_grp"}
+		userTable           = &Table{Name: "users", Alias: "u"}
+		primaryGroupTable   = &Table{Name: "groups", Alias: "prim_grp"}
+		secondaryGroupTable = &Table{Name: "groups", Alias: "sec_grp"}
 	)
 
 	s := Select{
@@ -20,8 +20,8 @@ func TestModel(t *testing.T) {
 				Source:   primaryGroupTable,
 				Constraints: []JoinConstraint{
 					{
-						RefColumn:    SourceColumn{SourceRef: primaryGroupTable, Name: "id"},
-						TargetColumn: SourceColumn{SourceRef: userTable, Name: "primary_group_id"},
+						RefColumn:    SourceColumn{Source: primaryGroupTable, Name: "id"},
+						TargetColumn: SourceColumn{Source: userTable, Name: "primary_group_id"},
 					},
 				},
 			},
@@ -30,13 +30,13 @@ func TestModel(t *testing.T) {
 				Source:   secondaryGroupTable,
 				Constraints: []JoinConstraint{
 					{
-						RefColumn:    SourceColumn{SourceRef: secondaryGroupTable, Name: "id"},
-						TargetColumn: SourceColumn{SourceRef: userTable, Name: "secondary_group_id"},
+						RefColumn:    SourceColumn{Source: secondaryGroupTable, Name: "id"},
+						TargetColumn: SourceColumn{Source: userTable, Name: "secondary_group_id"},
 					},
 				},
 			},
 		},
-		Columns: []SelectColumn{
+		Projections: []Projection{
 			userTable.Column("id"),
 			userTable.Column("first_name"),
 			userTable.Column("last_name"),
@@ -47,36 +47,44 @@ func TestModel(t *testing.T) {
 
 	gen := StatementGenerator{}
 
-	stmt := gen.Select(s)
+	stmt, err := gen.Select(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.Print(stmt.Text)
 }
 
 func TestModelMinimal(t *testing.T) {
 	var (
-		userTable = &Table{TableName: "users", TableAlias: "u"}
+		userTable = &Table{Name: "users", Alias: "u"}
 	)
 
 	s := Select{
 		BaseSource: userTable,
-		Columns: []SelectColumn{
+		Projections: []Projection{
 			userTable.Column("id"),
 			userTable.Column("username"),
 			RawSelectColumn{
-				Raw: "NOW()",
-				RawAlias: "created",
+				Raw:   "NOW()",
+				Alias: "created",
 			},
 		},
 	}
 	gen := StatementGenerator{}
 
-	stmt := gen.Select(s)
+	stmt, err := gen.Select(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.Print(stmt.Text)
 }
 
 func TestModelMinimal2(t *testing.T) {
 	var (
-		userTable      = &Table{TableName: "users", TableAlias: "u"}
-		addressesTable = &Table{TableName: "addresses", TableAlias: "a"}
+		userTable      = &Table{Name: "users", Alias: "u"}
+		addressesTable = &Table{Name: "addresses", Alias: "a"}
 	)
 
 	s := Select{
@@ -93,7 +101,7 @@ func TestModelMinimal2(t *testing.T) {
 				},
 			},
 		},
-		Columns: []SelectColumn{
+		Projections: []Projection{
 			userTable.Column("id"),
 			userTable.Column("username"),
 			addressesTable.Column("street"),
@@ -102,6 +110,58 @@ func TestModelMinimal2(t *testing.T) {
 	}
 	gen := StatementGenerator{}
 
-	stmt := gen.Select(s)
+	stmt, err := gen.Select(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Print(stmt.Text)
+}
+
+func TestSubQuery(t *testing.T) {
+	var (
+		userTable      = &Table{Name: "users", Alias: "u"}
+		addressesTable = &Table{Name: "addresses", Alias: "a"}
+	)
+
+	addresses := Select{
+		BaseSource: addressesTable,
+		Projections: []Projection{
+			addressesTable.Column("user_id"),
+			addressesTable.Column("street"),
+			addressesTable.Column("city"),
+		},
+	}
+
+	addressesSubQuery := &SubQuery{Select: addresses, Alias: "a"}
+
+	s := Select{
+		BaseSource: userTable,
+		Joins: []Join{
+			{
+				JoinType: JoinTypeInner,
+				Source:   addressesSubQuery,
+				Constraints: []JoinConstraint{
+					{
+						RefColumn:    addressesTable.Column("user_id"),
+						TargetColumn: userTable.Column("id"),
+					},
+				},
+			},
+		},
+		Projections: []Projection{
+			userTable.Column("id"),
+			userTable.Column("username"),
+			addressesSubQuery.Column("street"),
+			addressesSubQuery.Column("city"),
+		},
+	}
+	gen := StatementGenerator{}
+
+	stmt, err := gen.Select(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.Print(stmt.Text)
 }

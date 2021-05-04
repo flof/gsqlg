@@ -1,16 +1,26 @@
 package gsqlg
 
-import "fmt"
-
-type Select struct {
-	BaseSource Source
-	Joins      []Join
-	Columns    []SelectColumn
+type Source interface {
+	Aliaser
 }
 
-type Source interface {
-	Definition() string
-	Alias() string
+type Projection interface{}
+
+type Aliaser interface {
+	GetAlias() string
+}
+
+var (
+	_ Source     = &Table{}
+	_ Source     = &SubQuery{}
+	_ Projection = SourceColumn{}
+	_ Projection = RawSelectColumn{}
+)
+
+type Select struct {
+	BaseSource  Source
+	Joins       []Join
+	Projections []Projection
 }
 
 type Join struct {
@@ -24,39 +34,14 @@ type JoinConstraint struct {
 	TargetColumn SourceColumn
 }
 
-type SelectColumn interface {
-	Definition() string
-	Alias() string
-}
-
 type RawSelectColumn struct {
-	Raw      string
-	RawAlias string
+	Raw   string
+	Alias string
 }
-
-func (r RawSelectColumn) Definition() string {
-	return r.Raw
-}
-
-func (r RawSelectColumn) Alias() string {
-	return r.RawAlias
-}
-
-var (
-	_ SelectColumn = SourceColumn{}
-)
 
 type SourceColumn struct {
-	SourceRef Source
-	Name      string
-}
-
-func (s SourceColumn) Definition() string {
-	return fmt.Sprintf("%s.%s", s.SourceRef.Alias(), s.Name)
-}
-
-func (s SourceColumn) Alias() string {
-	return fmt.Sprintf("%s_%s", s.SourceRef.Alias(), s.Name)
+	Source Source
+	Name   string
 }
 
 type JoinType int
@@ -68,26 +53,34 @@ const (
 	JoinTypeCross
 )
 
-var (
-	_ Source = &Table{}
-)
-
 type Table struct {
-	TableName  string
-	TableAlias string
-}
-
-func (t *Table) Definition() string {
-	return t.TableName
-}
-
-func (t *Table) Alias() string {
-	return t.TableAlias
+	Name  string
+	Alias string
 }
 
 func (t *Table) Column(name string) SourceColumn {
 	return SourceColumn{
-		SourceRef: t,
-		Name:      name,
+		Source: t,
+		Name:   name,
 	}
+}
+
+func (t *Table) GetAlias() string {
+	return t.Alias
+}
+
+type SubQuery struct {
+	Select Select
+	Alias  string
+}
+
+func (s *SubQuery) Column(name string) SourceColumn {
+	return SourceColumn{
+		Source: s,
+		Name:   name,
+	}
+}
+
+func (s *SubQuery) GetAlias() string {
+	return s.Alias
 }
